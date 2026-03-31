@@ -1,0 +1,1007 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SwarmSearch MARL · Visualiser</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap');
+
+  :root {
+    --bg:       #0a0c0f;
+    --surface:  #0f1318;
+    --border:   #1e2530;
+    --dim:      #2a3340;
+    --muted:    #4a5568;
+    --text:     #c8d6e8;
+    --bright:   #e8f0fa;
+    --cyan:     #38bdf8;
+    --green:    #4ade80;
+    --yellow:   #facc15;
+    --red:      #f87171;
+    --orange:   #fb923c;
+    --purple:   #a78bfa;
+
+    /* grid cell colours */
+    --c-empty:    #0f1318;
+    --c-covered:  #0d2035;
+    --c-obstacle: #1e2530;
+    --c-agent0:   #38bdf8;
+    --c-agent1:   #4ade80;
+    --c-agent2:   #facc15;
+    --c-agent3:   #a78bfa;
+    --c-target:   #f87171;
+    --c-found:    #fb923c;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    min-height: 100vh;
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    grid-template-columns: 1fr;
+    overflow: hidden;
+  }
+
+  /* ── HEADER ─────────────────────────────────────────────────────────── */
+  header {
+    padding: 10px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    background: var(--surface);
+  }
+  header .logo {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    color: var(--cyan);
+    text-transform: uppercase;
+  }
+  header .sep { color: var(--dim); }
+  header .subtitle {
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.05em;
+  }
+  header .badge {
+    margin-left: auto;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    padding: 2px 8px;
+    border-radius: 2px;
+    background: var(--dim);
+    color: var(--muted);
+  }
+  header .badge.running { background: #0d2510; color: var(--green); }
+  header .badge.done    { background: #1a1008; color: var(--yellow); }
+
+  /* ── MAIN LAYOUT ─────────────────────────────────────────────────────── */
+  main {
+    display: grid;
+    grid-template-columns: 1fr 260px;
+    grid-template-rows: 1fr;
+    gap: 0;
+    overflow: hidden;
+    height: calc(100vh - 86px);
+  }
+
+  /* ── GRID PANEL ──────────────────────────────────────────────────────── */
+  #grid-panel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    border-right: 1px solid var(--border);
+    gap: 10px;
+    overflow: hidden;
+  }
+
+  #episode-bar {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 11px;
+    color: var(--muted);
+  }
+  #episode-bar .ep-label { color: var(--bright); font-weight: 600; }
+  #episode-bar .step-val { color: var(--cyan); }
+  .progress-track {
+    flex: 1;
+    height: 3px;
+    background: var(--dim);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--cyan), var(--purple));
+    border-radius: 2px;
+    transition: width 0.15s ease;
+  }
+
+  canvas#grid {
+    image-rendering: pixelated;
+    border: 1px solid var(--border);
+    cursor: default;
+  }
+
+  #coverage-bar-wrap {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+  }
+  #coverage-bar-wrap .label { color: var(--muted); width: 70px; flex-shrink: 0; }
+  #coverage-bar-wrap .track {
+    flex: 1; height: 6px;
+    background: var(--dim);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  #coverage-bar-wrap .fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--green), var(--cyan));
+    border-radius: 3px;
+    transition: width 0.2s ease;
+  }
+  #coverage-bar-wrap .val { color: var(--green); font-weight: 600; width: 44px; text-align: right; }
+
+  /* ── CONTROLS ─────────────────────────────────────────────────────────── */
+  #ctrl-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    width: 100%;
+  }
+  button {
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 5px 14px;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    background: var(--surface);
+    color: var(--muted);
+    cursor: pointer;
+    transition: all 0.12s;
+  }
+  button:hover { border-color: var(--cyan); color: var(--cyan); }
+  button.primary {
+    background: #072030;
+    border-color: var(--cyan);
+    color: var(--cyan);
+  }
+  button.primary:hover { background: #0a3048; }
+  button:disabled { opacity: 0.3; cursor: not-allowed; }
+
+  select {
+    font-family: inherit;
+    font-size: 11px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 4px 8px;
+    border-radius: 3px;
+    cursor: pointer;
+  }
+  select:focus { outline: none; border-color: var(--cyan); }
+
+  .speed-label { font-size: 11px; color: var(--muted); }
+
+  /* ── SIDE PANEL ──────────────────────────────────────────────────────── */
+  #side-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    overflow: hidden;
+    background: var(--surface);
+  }
+
+  .side-section {
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .side-section .sec-title {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+
+  /* Agent cards */
+  .agent-card {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 0;
+    font-size: 11px;
+  }
+  .agent-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .agent-name { color: var(--text); min-width: 56px; }
+  .agent-pos  { color: var(--muted); font-size: 10px; min-width: 60px; }
+  .agent-reward { color: var(--green); margin-left: auto; font-size: 10px; }
+
+  /* Target cards */
+  .target-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 0;
+    font-size: 11px;
+  }
+  .t-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .t-name { color: var(--text); min-width: 60px; }
+  .t-status { margin-left: auto; font-size: 10px; }
+  .t-status.found    { color: var(--orange); }
+  .t-status.tracking { color: var(--yellow); }
+  .t-status.lost     { color: var(--muted); }
+
+  /* Stats grid */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+  .stat-cell {
+    padding: 6px 8px;
+    background: var(--bg);
+    border-radius: 3px;
+    border: 1px solid var(--border);
+  }
+  .stat-cell .s-label { font-size: 9px; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 2px; }
+  .stat-cell .s-val   { font-size: 15px; font-weight: 700; color: var(--bright); }
+  .stat-cell .s-val.green  { color: var(--green); }
+  .stat-cell .s-val.cyan   { color: var(--cyan); }
+  .stat-cell .s-val.yellow { color: var(--yellow); }
+  .stat-cell .s-val.red    { color: var(--red); }
+
+  /* Log */
+  #log-wrap {
+    flex: 1;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  #log-wrap .sec-title {
+    padding: 8px 14px 4px;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    color: var(--muted);
+    text-transform: uppercase;
+    flex-shrink: 0;
+  }
+  #log {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0 14px 10px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--dim) transparent;
+  }
+  #log::-webkit-scrollbar { width: 4px; }
+  #log::-webkit-scrollbar-thumb { background: var(--dim); border-radius: 2px; }
+
+  .log-line {
+    padding: 2px 0;
+    font-size: 10px;
+    font-family: 'IBM Plex Mono', monospace;
+    line-height: 1.5;
+    color: var(--muted);
+    border-left: 2px solid transparent;
+    padding-left: 6px;
+  }
+  .log-line.info    { color: var(--text);   border-color: var(--dim); }
+  .log-line.success { color: var(--green);  border-color: var(--green); }
+  .log-line.warn    { color: var(--yellow); border-color: var(--yellow); }
+  .log-line.event   { color: var(--cyan);   border-color: var(--cyan); }
+  .log-line.dim     { color: var(--muted); }
+
+  /* ── FOOTER ─────────────────────────────────────────────────────────── */
+  footer {
+    padding: 6px 20px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 20px;
+    font-size: 10px;
+    color: var(--muted);
+    background: var(--surface);
+    flex-shrink: 0;
+  }
+  footer .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  footer .legend-dot {
+    width: 8px; height: 8px;
+    border-radius: 1px;
+  }
+
+  /* outcome banner */
+  #outcome-banner {
+    display: none;
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%,-50%);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 20px 36px;
+    text-align: center;
+    z-index: 100;
+    font-size: 12px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+  }
+  #outcome-banner .ob-title {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    margin-bottom: 6px;
+  }
+  #outcome-banner.success .ob-title { color: var(--green); }
+  #outcome-banner.timeout .ob-title { color: var(--yellow); }
+  #outcome-banner .ob-sub { color: var(--muted); font-size: 11px; }
+  #outcome-banner button { margin-top: 14px; }
+</style>
+</head>
+<body>
+
+<header>
+  <span class="logo">SwarmSearch MARL</span>
+  <span class="sep">—</span>
+  <span class="subtitle">Decentralized Target Search · Random Policy · PettingZoo Parallel API</span>
+  <span class="badge" id="status-badge">IDLE</span>
+</header>
+
+<main>
+  <!-- ── GRID PANEL ─────────────────────────────── -->
+  <div id="grid-panel">
+    <div id="episode-bar">
+      <span class="ep-label" id="ep-label">EP 0</span>
+      <span class="sep" style="color:var(--dim)">·</span>
+      <span id="step-label">STEP <span class="step-val" id="step-disp">0</span></span>
+      <div class="progress-track"><div class="progress-fill" id="prog-fill" style="width:0%"></div></div>
+      <span id="max-steps-label" style="color:var(--dim)">/ 300</span>
+    </div>
+
+    <canvas id="grid"></canvas>
+
+    <div id="coverage-bar-wrap">
+      <span class="label">Coverage</span>
+      <div class="track"><div class="fill" id="cov-fill" style="width:0%"></div></div>
+      <span class="val" id="cov-val">0.0%</span>
+    </div>
+
+    <div id="ctrl-row">
+      <button class="primary" id="btn-start">▶ Start</button>
+      <button id="btn-reset" disabled>↺ Reset</button>
+      <span class="speed-label">Speed:</span>
+      <select id="speed-sel">
+        <option value="200">Slow</option>
+        <option value="80" selected>Normal</option>
+        <option value="30">Fast</option>
+        <option value="8">Turbo</option>
+      </select>
+      <span class="speed-label">Episodes:</span>
+      <select id="ep-sel">
+        <option value="1">1</option>
+        <option value="3" selected>3</option>
+        <option value="5">5</option>
+        <option value="10">10</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- ── SIDE PANEL ─────────────────────────────── -->
+  <div id="side-panel">
+
+    <!-- Agents -->
+    <div class="side-section">
+      <div class="sec-title">Agents</div>
+      <div id="agent-list"></div>
+    </div>
+
+    <!-- Targets -->
+    <div class="side-section">
+      <div class="sec-title">Targets</div>
+      <div id="target-list"></div>
+    </div>
+
+    <!-- Stats -->
+    <div class="side-section">
+      <div class="sec-title">Episode Stats</div>
+      <div class="stats-grid">
+        <div class="stat-cell">
+          <div class="s-label">Reward</div>
+          <div class="s-val cyan" id="stat-reward">0</div>
+        </div>
+        <div class="stat-cell">
+          <div class="s-label">Found</div>
+          <div class="s-val yellow" id="stat-found">0 / 0</div>
+        </div>
+        <div class="stat-cell">
+          <div class="s-label">Successes</div>
+          <div class="s-val green" id="stat-succ">0</div>
+        </div>
+        <div class="stat-cell">
+          <div class="s-label">Ep Done</div>
+          <div class="s-val" id="stat-ep">0 / 0</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Log -->
+    <div id="log-wrap">
+      <div class="sec-title">Event Log</div>
+      <div id="log"></div>
+    </div>
+
+  </div>
+</main>
+
+<footer>
+  <span class="legend-item"><span class="legend-dot" style="background:#38bdf8"></span>Drone 0</span>
+  <span class="legend-item"><span class="legend-dot" style="background:#4ade80"></span>Drone 1</span>
+  <span class="legend-item"><span class="legend-dot" style="background:#facc15"></span>Drone 2</span>
+  <span class="legend-item"><span class="legend-dot" style="background:#a78bfa"></span>Drone 3</span>
+  <span class="legend-item"><span class="legend-dot" style="background:#f87171"></span>Target</span>
+  <span class="legend-item"><span class="legend-dot" style="background:#fb923c"></span>Found</span>
+  <span class="legend-item"><span class="legend-dot" style="background:#0d2035"></span>Explored</span>
+  <span class="legend-item"><span class="legend-dot" style="background:#1e2530"></span>Obstacle</span>
+</footer>
+
+<div id="outcome-banner">
+  <div class="ob-title" id="ob-title">MISSION SUCCESS</div>
+  <div class="ob-sub" id="ob-sub">All targets located</div>
+  <button onclick="dismissBanner()">CONTINUE</button>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════
+// ENV SIMULATION  (JavaScript port of swarm_search_env.py)
+// ═══════════════════════════════════════════════════════════════════════
+
+const AGENT_COLORS = ['#38bdf8','#4ade80','#facc15','#a78bfa'];
+
+class SwarmSearchJS {
+  constructor({ numAgents=4, gridSize=20, numTargets=3, sensorRange=5, commRange=8, maxSteps=300 }={}) {
+    this.numAgents   = numAgents;
+    this.gridSize    = gridSize;
+    this.numTargets  = numTargets;
+    this.sensorRange = sensorRange;
+    this.commRange   = commRange;
+    this.maxSteps    = maxSteps;
+    this.possibleAgents = Array.from({length:numAgents}, (_,i)=>`drone_${i}`);
+
+    this.obstacleMap = this._genObstacles();
+    this.reset();
+  }
+
+  _genObstacles() {
+    const m = Array.from({length:this.gridSize}, ()=>new Uint8Array(this.gridSize));
+    for (let r=8;r<12;r++) m[r][8]=1;  // vertical wall
+    for (let c=8;c<12;c++) m[8][c]=1;  // horizontal wall
+    for (let r=4;r<7;r++)  m[r][14]=1; // cluster 2
+    for (let r=14;r<17;r++) for (let c=5;c<7;c++) m[r][c]=1;
+    return m;
+  }
+
+  _rng(lo, hi) { return lo + Math.floor(Math.random()*(hi-lo+1)); }
+
+  reset(seed=null) {
+    if (seed!==null) { /* deterministic seeding not implemented in JS — acceptable */ }
+    this.agents       = [...this.possibleAgents];
+    this.timestep     = 0;
+    this.foundTargets = new Set();
+    this.coverageMap  = Array.from({length:this.gridSize}, ()=>new Uint8Array(this.gridSize));
+    this.discoveryTimes = {};
+    this.episodeRewards = Object.fromEntries(this.possibleAgents.map(a=>[a,0]));
+
+    this.agentPositions = Object.fromEntries(
+      this.possibleAgents.map(a=>[a,[this._rng(0,3),this._rng(0,3)]])
+    );
+    this.targetPositions = Array.from({length:this.numTargets}, ()=>[
+      this._rng(this.gridSize-7, this.gridSize-1),
+      this._rng(this.gridSize-7, this.gridSize-1),
+    ]);
+
+    this._updateCoverage();
+    return this._buildObs();
+  }
+
+  _hasLOS(p1, p2, maxDist) {
+    const dx=p2[0]-p1[0], dy=p2[1]-p1[1];
+    if (Math.sqrt(dx*dx+dy*dy) > maxDist) return false;
+    let x0=p1[0]|0, y0=p1[1]|0, x1=p2[0]|0, y1=p2[1]|0;
+    const adx=Math.abs(x1-x0), ady=Math.abs(y1-y0);
+    const sx=x0<x1?1:-1, sy=y0<y1?1:-1;
+    let x=x0, y=y0;
+    if (adx >= ady) {
+      let err=adx/2;
+      while (x!==x1) {
+        if (this.obstacleMap[x]?.[y]===1) return false;
+        err-=ady; if(err<0){y+=sy;err+=adx;} x+=sx;
+      }
+    } else {
+      let err=ady/2;
+      while (y!==y1) {
+        if (this.obstacleMap[x]?.[y]===1) return false;
+        err-=adx; if(err<0){x+=sx;err+=ady;} y+=sy;
+      }
+    }
+    return this.obstacleMap[x]?.[y]===0;
+  }
+
+  _updateCoverage() {
+    let newCells=0;
+    for (const pos of Object.values(this.agentPositions)) {
+      const [px,py]=pos;
+      for (let cx=Math.max(0,px-this.sensorRange); cx<Math.min(this.gridSize,px+this.sensorRange+1); cx++) {
+        for (let cy=Math.max(0,py-this.sensorRange); cy<Math.min(this.gridSize,py+this.sensorRange+1); cy++) {
+          if (!this.coverageMap[cx][cy]) {
+            if (this._hasLOS(pos,[cx,cy],this.sensorRange)) {
+              this.coverageMap[cx][cy]=1; newCells++;
+            }
+          }
+        }
+      }
+    }
+    return newCells;
+  }
+
+  _dist(a,b) { return Math.sqrt((a[0]-b[0])**2+(a[1]-b[1])**2); }
+
+  step(actions) {
+    this.timestep++;
+    const rewards = Object.fromEntries(this.agents.map(a=>[a,0]));
+
+    // 1. Movement
+    for (const [ag, action] of Object.entries(actions)) {
+      let [x,y] = this.agentPositions[ag];
+      let nx=x, ny=y;
+      if (action===0) ny++;
+      else if (action===1) ny--;
+      else if (action===2) nx--;
+      else if (action===3) nx++;
+      if (nx>=0&&nx<this.gridSize&&ny>=0&&ny<this.gridSize&&this.obstacleMap[nx][ny]===0) {
+        this.agentPositions[ag]=[nx,ny];
+      } else rewards[ag]-=0.5;
+      rewards[ag]-=0.05;
+    }
+
+    // 2. Target evasion
+    for (let i=0;i<this.numTargets;i++) {
+      const tp=this.targetPositions[i];
+      let minD=Infinity;
+      for (const a of this.agents) minD=Math.min(minD, this._dist(this.agentPositions[a],tp));
+      let dx=0,dy=0;
+      if (minD < this.sensorRange+2 || Math.random()<0.1) {
+        dx=[-1,0,1][Math.floor(Math.random()*3)];
+        dy=[-1,0,1][Math.floor(Math.random()*3)];
+      }
+      const nx=Math.min(Math.max(0,tp[0]+dx),this.gridSize-1);
+      const ny=Math.min(Math.max(0,tp[1]+dy),this.gridSize-1);
+      if (this.obstacleMap[nx][ny]===0) this.targetPositions[i]=[nx,ny];
+    }
+
+    // 3. Coverage + dispersion
+    const newCells=this._updateCoverage();
+    for (const a of this.agents) {
+      rewards[a]+=newCells*0.5;
+      for (const b of this.agents) {
+        if (a!==b && this._dist(this.agentPositions[a],this.agentPositions[b])<2) rewards[a]-=0.5;
+      }
+    }
+
+    // 4. Discovery
+    const tracked=new Set();
+    for (const a of this.agents)
+      for (let t=0;t<this.numTargets;t++)
+        if (this._hasLOS(this.agentPositions[a],this.targetPositions[t],this.sensorRange))
+          tracked.add(t);
+
+    const newlyFound=[];
+    for (const t of tracked) {
+      if (!this.foundTargets.has(t)) {
+        this.foundTargets.add(t); this.discoveryTimes[t]=this.timestep;
+        newlyFound.push(t);
+        for (const a of this.agents) rewards[a]+=100;
+      } else {
+        for (const a of this.agents) rewards[a]+=1;
+      }
+    }
+
+    // 5. Terminal
+    const done      = this.foundTargets.size===this.numTargets;
+    const truncated = this.timestep>=this.maxSteps;
+    if (done) for (const a of this.agents) rewards[a]+=500;
+    for (const a of this.agents) this.episodeRewards[a]+=rewards[a];
+    if (done||truncated) this.agents=[];
+
+    const covPct=this._covPct();
+    return { done, truncated, rewards, newlyFound, covPct };
+  }
+
+  _covPct() {
+    let s=0;
+    for (let x=0;x<this.gridSize;x++) for (let y=0;y<this.gridSize;y++) s+=this.coverageMap[x][y];
+    return s/(this.gridSize*this.gridSize)*100;
+  }
+
+  _buildObs() { return {}; }
+
+  totalReward() {
+    return Object.values(this.episodeRewards).reduce((s,v)=>s+v,0);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// RENDERER
+// ═══════════════════════════════════════════════════════════════════════
+
+const canvas = document.getElementById('grid');
+const ctx    = canvas.getContext('2d');
+const CELL   = 24;
+
+function setupCanvas(gridSize) {
+  const sz = gridSize * CELL;
+  canvas.width  = sz;
+  canvas.height = sz;
+  const maxSz = Math.min(window.innerWidth - 300, window.innerHeight - 160);
+  const scale = Math.min(1, maxSz / sz);
+  canvas.style.width  = (sz * scale) + 'px';
+  canvas.style.height = (sz * scale) + 'px';
+}
+
+function drawGrid(env, agentIdxMap) {
+  const G = env.gridSize;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Background cells
+  for (let x=0;x<G;x++) for (let y=0;y<G;y++) {
+    if      (env.obstacleMap[x][y]) ctx.fillStyle='#1e2530';
+    else if (env.coverageMap[x][y]) ctx.fillStyle='#0d2035';
+    else                            ctx.fillStyle='#0a0c0f';
+    ctx.fillRect(x*CELL, (G-1-y)*CELL, CELL, CELL);
+  }
+
+  // Grid lines (subtle)
+  ctx.strokeStyle='rgba(30,37,48,0.6)';
+  ctx.lineWidth=0.5;
+  for (let i=0;i<=G;i++) {
+    ctx.beginPath(); ctx.moveTo(i*CELL,0); ctx.lineTo(i*CELL,G*CELL); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0,i*CELL); ctx.lineTo(G*CELL,i*CELL); ctx.stroke();
+  }
+
+  // Targets
+  for (let t=0;t<env.numTargets;t++) {
+    const [tx,ty] = env.targetPositions[t];
+    const found = env.foundTargets.has(t);
+    const cx = tx*CELL + CELL/2;
+    const cy = (G-1-ty)*CELL + CELL/2;
+    const r  = CELL*0.35;
+    // Glow
+    const grd = ctx.createRadialGradient(cx,cy,0,cx,cy,r*2);
+    grd.addColorStop(0, found ? 'rgba(251,146,60,0.25)' : 'rgba(248,113,113,0.2)');
+    grd.addColorStop(1, 'transparent');
+    ctx.fillStyle=grd; ctx.beginPath(); ctx.arc(cx,cy,r*2,0,Math.PI*2); ctx.fill();
+    // Body
+    ctx.fillStyle  = found ? '#fb923c' : '#f87171';
+    ctx.strokeStyle= found ? '#fed7aa' : '#fca5a5';
+    ctx.lineWidth  = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy-r);
+    ctx.lineTo(cx+r*0.87, cy+r*0.5);
+    ctx.lineTo(cx-r*0.87, cy+r*0.5);
+    ctx.closePath();
+    ctx.fill(); ctx.stroke();
+  }
+
+  // Agents
+  for (const [ag, pos] of Object.entries(env.agentPositions)) {
+    const [ax,ay] = pos;
+    const idx     = agentIdxMap[ag] ?? 0;
+    const color   = AGENT_COLORS[idx % AGENT_COLORS.length];
+    const cx = ax*CELL + CELL/2;
+    const cy = (G-1-ay)*CELL + CELL/2;
+    const r  = CELL*0.38;
+
+    // Sensor range circle (faint)
+    ctx.strokeStyle=color+'22'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.arc(cx,cy,env.sensorRange*CELL,0,Math.PI*2); ctx.stroke();
+
+    // Agent glow
+    const grd = ctx.createRadialGradient(cx,cy,0,cx,cy,r*2.5);
+    grd.addColorStop(0, color+'40'); grd.addColorStop(1,'transparent');
+    ctx.fillStyle=grd; ctx.beginPath(); ctx.arc(cx,cy,r*2.5,0,Math.PI*2); ctx.fill();
+
+    // Agent body (diamond)
+    ctx.fillStyle  = color;
+    ctx.strokeStyle= '#0a0c0f';
+    ctx.lineWidth  = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy-r);
+    ctx.lineTo(cx+r, cy);
+    ctx.lineTo(cx, cy+r);
+    ctx.lineTo(cx-r, cy);
+    ctx.closePath();
+    ctx.fill(); ctx.stroke();
+
+    // Label
+    ctx.fillStyle='#0a0c0f';
+    ctx.font=`bold ${CELL*0.36}px JetBrains Mono`;
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(idx, cx, cy+0.5);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// UI HELPERS
+// ═══════════════════════════════════════════════════════════════════════
+
+function log(msg, cls='dim') {
+  const el = document.createElement('div');
+  el.className = `log-line ${cls}`;
+  el.textContent = msg;
+  const logEl = document.getElementById('log');
+  logEl.appendChild(el);
+  logEl.scrollTop = logEl.scrollHeight;
+  // keep last 120 lines
+  while (logEl.children.length > 120) logEl.removeChild(logEl.firstChild);
+}
+
+function updateAgentList(env) {
+  const el = document.getElementById('agent-list');
+  el.innerHTML='';
+  const agIdxMap = Object.fromEntries(env.possibleAgents.map((a,i)=>[a,i]));
+  for (const a of env.possibleAgents) {
+    const pos = env.agentPositions[a] ?? ['-','-'];
+    const rew = env.episodeRewards[a] ?? 0;
+    const alive = env.agents.includes(a);
+    const color = AGENT_COLORS[agIdxMap[a] % AGENT_COLORS.length];
+    el.innerHTML += `
+      <div class="agent-card" style="opacity:${alive?1:0.3}">
+        <span class="agent-dot" style="background:${color}"></span>
+        <span class="agent-name">${a}</span>
+        <span class="agent-pos">[${Array.isArray(pos)?pos.join(', '):pos}]</span>
+        <span class="agent-reward">+${rew.toFixed(1)}</span>
+      </div>`;
+  }
+}
+
+function updateTargetList(env, tracked) {
+  const el = document.getElementById('target-list');
+  el.innerHTML='';
+  for (let t=0; t<env.numTargets; t++) {
+    const found   = env.foundTargets.has(t);
+    const inView  = tracked && tracked.has(t);
+    const status  = found ? 'FOUND' : inView ? 'VISIBLE' : 'HIDDEN';
+    const cls     = found ? 'found' : inView ? 'tracking' : 'lost';
+    const pos     = env.targetPositions[t];
+    el.innerHTML += `
+      <div class="target-row">
+        <span class="t-dot" style="background:${found?'#fb923c':'#f87171'}"></span>
+        <span class="t-name">target_${t}</span>
+        <span class="t-pos" style="font-size:10px;color:var(--muted)">[${pos.join(', ')}]</span>
+        <span class="t-status ${cls}">${status}</span>
+      </div>`;
+  }
+}
+
+function updateStats(env, totalReward, successes, totalEps, maxEps) {
+  document.getElementById('stat-reward').textContent = totalReward.toFixed(0);
+  document.getElementById('stat-found').textContent  = `${env.foundTargets.size} / ${env.numTargets}`;
+  document.getElementById('stat-succ').textContent   = successes;
+  document.getElementById('stat-ep').textContent     = `${totalEps} / ${maxEps}`;
+}
+
+function setStatus(txt, cls='') {
+  const b = document.getElementById('status-badge');
+  b.textContent = txt;
+  b.className   = `badge ${cls}`;
+}
+
+function showBanner(outcome, reason) {
+  const el = document.getElementById('outcome-banner');
+  el.className = `outcome-banner ${outcome}`;
+  el.style.display='block';
+  document.getElementById('ob-title').textContent = outcome==='success' ? '✓ MISSION SUCCESS' : '⏱ TIME LIMIT REACHED';
+  document.getElementById('ob-sub').textContent   = reason;
+}
+
+function dismissBanner() {
+  document.getElementById('outcome-banner').style.display='none';
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// RUNNER
+// ═══════════════════════════════════════════════════════════════════════
+
+let runnerTimer  = null;
+let env          = null;
+let agentIdxMap  = {};
+let successes    = 0;
+let currentEp    = 0;
+let totalEps     = 0;
+let stepReward   = 0;
+let isRunning    = false;
+
+function buildEnv() {
+  const e = new SwarmSearchJS({ numAgents:4, gridSize:20, numTargets:3, sensorRange:5, commRange:8, maxSteps:300 });
+  agentIdxMap = Object.fromEntries(e.possibleAgents.map((a,i)=>[a,i]));
+  return e;
+}
+
+function startRun() {
+  const numEps = parseInt(document.getElementById('ep-sel').value);
+  totalEps     = numEps;
+  currentEp    = 0;
+  successes    = 0;
+
+  document.getElementById('btn-start').disabled = true;
+  document.getElementById('btn-reset').disabled = false;
+  isRunning = true;
+  setStatus('RUNNING', 'running');
+
+  log(`━━ Run started · ${numEps} episodes · Random policy`, 'event');
+  log(`   Agents: 4 drones · Targets: 3 · Grid: 20×20`, 'dim');
+
+  startNextEpisode(numEps);
+}
+
+function startNextEpisode(numEps) {
+  if (!isRunning || currentEp >= numEps) {
+    endRun(numEps);
+    return;
+  }
+  currentEp++;
+  stepReward = 0;
+  env = buildEnv();
+  env.reset(currentEp);
+  setupCanvas(env.gridSize);
+
+  document.getElementById('ep-label').textContent    = `EP ${currentEp}`;
+  document.getElementById('max-steps-label').textContent = `/ ${env.maxSteps}`;
+  document.getElementById('step-disp').textContent   = '0';
+  document.getElementById('prog-fill').style.width   = '0%';
+  document.getElementById('cov-fill').style.width    = '0%';
+  document.getElementById('cov-val').textContent     = '0.0%';
+
+  log(`─ Episode ${currentEp} / ${numEps} started`, 'info');
+
+  drawGrid(env, agentIdxMap);
+  updateAgentList(env);
+  updateTargetList(env, new Set());
+  updateStats(env, stepReward, successes, currentEp-1, numEps);
+
+  scheduleStep(numEps);
+}
+
+function scheduleStep(numEps) {
+  const delay = parseInt(document.getElementById('speed-sel').value);
+  runnerTimer = setTimeout(() => doStep(numEps), delay);
+}
+
+function doStep(numEps) {
+  if (!isRunning) return;
+
+  const actions = Object.fromEntries(env.agents.map(a => [a, Math.floor(Math.random()*5)]));
+  const { done, truncated, rewards, newlyFound, covPct } = env.step(actions);
+
+  // Track which targets are in view this step
+  const tracked = new Set();
+  for (const a of Object.keys(env.agentPositions)) {
+    for (let t=0;t<env.numTargets;t++) {
+      if (env._hasLOS(env.agentPositions[a]??[0,0], env.targetPositions[t], env.sensorRange)) tracked.add(t);
+    }
+  }
+
+  const stepR = Object.values(rewards).reduce((s,v)=>s+v,0);
+  stepReward += stepR;
+
+  // Update UI
+  document.getElementById('step-disp').textContent   = env.timestep;
+  document.getElementById('prog-fill').style.width   = (env.timestep/env.maxSteps*100)+'%';
+  document.getElementById('cov-fill').style.width    = covPct+'%';
+  document.getElementById('cov-val').textContent     = covPct.toFixed(1)+'%';
+
+  drawGrid(env, agentIdxMap);
+  updateAgentList(env);
+  updateTargetList(env, tracked);
+  updateStats(env, stepReward, successes, currentEp-1, numEps);
+
+  for (const t of newlyFound) {
+    log(`  [t=${env.timestep}] ★ Target ${t} DISCOVERED  (+100 r)`, 'success');
+  }
+
+  if (done) {
+    successes++;
+    log(`  [t=${env.timestep}] ✓ Mission success!  (+500 r)  coverage=${covPct.toFixed(1)}%`, 'success');
+    updateStats(env, stepReward, successes, currentEp, numEps);
+    showBanner('success', `All ${env.numTargets} targets found in ${env.timestep} steps`);
+    setTimeout(() => {
+      dismissBanner();
+      startNextEpisode(numEps);
+    }, 1200);
+    return;
+  }
+
+  if (truncated) {
+    log(`  [t=${env.timestep}] ⏱ Timeout · found=${env.foundTargets.size}/${env.numTargets}  coverage=${covPct.toFixed(1)}%`, 'warn');
+    updateStats(env, stepReward, successes, currentEp, numEps);
+    showBanner('timeout', `Found ${env.foundTargets.size}/${env.numTargets} targets`);
+    setTimeout(() => {
+      dismissBanner();
+      startNextEpisode(numEps);
+    }, 1000);
+    return;
+  }
+
+  scheduleStep(numEps);
+}
+
+function endRun(numEps) {
+  setStatus('DONE', 'done');
+  isRunning = false;
+  document.getElementById('btn-start').disabled = false;
+
+  const rate = (successes/numEps*100).toFixed(0);
+  log(`━━ Run ended · ${successes}/${numEps} success · rate=${rate}%`, 'event');
+}
+
+function resetAll() {
+  clearTimeout(runnerTimer);
+  isRunning = false;
+  if (env) { env.reset(); drawGrid(env, agentIdxMap); }
+  document.getElementById('btn-start').disabled  = false;
+  document.getElementById('btn-reset').disabled  = true;
+  document.getElementById('ep-label').textContent = 'EP 0';
+  document.getElementById('step-disp').textContent = '0';
+  document.getElementById('prog-fill').style.width = '0%';
+  document.getElementById('cov-fill').style.width  = '0%';
+  document.getElementById('cov-val').textContent   = '0.0%';
+  setStatus('IDLE');
+  log('─ Reset', 'dim');
+  dismissBanner();
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// BOOT
+// ═══════════════════════════════════════════════════════════════════════
+document.getElementById('btn-start').addEventListener('click', startRun);
+document.getElementById('btn-reset').addEventListener('click', resetAll);
+
+// Initial render
+env = buildEnv();
+env.reset(0);
+setupCanvas(env.gridSize);
+drawGrid(env, agentIdxMap);
+updateAgentList(env);
+updateTargetList(env, new Set());
+
+log('SwarmSearch MARL Visualiser ready.', 'info');
+log('Policy: Random · 4 drones · 3 evading targets · 20×20 grid', 'dim');
+log('Select episodes and press ▶ Start to run.', 'dim');
+</script>
+</body>
+</html>
