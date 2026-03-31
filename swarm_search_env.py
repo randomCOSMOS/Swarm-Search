@@ -393,6 +393,7 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="SwarmSearch MARL runner")
+
     parser.add_argument(
         "--mode",
         choices=("ui", "runner", "api-test"),
@@ -405,6 +406,8 @@ if __name__ == "__main__":
     parser.add_argument("--grid",        type=int,   default=20,   help="Grid size NxN")
     parser.add_argument("--max-steps",   type=int,   default=300,  help="Max steps per episode")
     parser.add_argument("--delay",       type=float, default=0.0,  help="Seconds between steps (for live viz)")
+    parser.add_argument("--api-test",    action="store_true",       help="Run PettingZoo API test only")
+
     args = parser.parse_args()
 
     env = SwarmSearchEnv(
