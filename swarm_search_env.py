@@ -3,6 +3,8 @@ import functools
 import json
 import sys
 import time
+import webbrowser
+from pathlib import Path
 from pettingzoo import ParallelEnv
 from gymnasium.spaces import Box, Discrete, Dict
 
@@ -391,13 +393,18 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="SwarmSearch MARL runner")
+    parser.add_argument(
+        "--mode",
+        choices=("ui", "runner", "api-test"),
+        default="ui",
+        help="ui opens the hardcoded HTML visualizer, runner prints JSON events, api-test runs PettingZoo validation",
+    )
     parser.add_argument("--episodes",    type=int,   default=5,    help="Number of episodes to run")
     parser.add_argument("--agents",      type=int,   default=4,    help="Number of drones")
     parser.add_argument("--targets",     type=int,   default=3,    help="Number of targets")
     parser.add_argument("--grid",        type=int,   default=20,   help="Grid size NxN")
     parser.add_argument("--max-steps",   type=int,   default=300,  help="Max steps per episode")
     parser.add_argument("--delay",       type=float, default=0.0,  help="Seconds between steps (for live viz)")
-    parser.add_argument("--api-test",    action="store_true",       help="Run PettingZoo API test only")
     args = parser.parse_args()
 
     env = SwarmSearchEnv(
@@ -407,7 +414,17 @@ if __name__ == "__main__":
         max_timesteps=args.max_steps,
     )
 
-    if args.api_test:
+    if args.mode == "ui":
+        ui_path = Path(__file__).with_name("swarm_search_ui.html").resolve()
+        if not ui_path.exists():
+            print(f"UI file not found: {ui_path}", file=sys.stderr)
+            sys.exit(1)
+
+        webbrowser.open(ui_path.as_uri(), new=2)
+        print(f"Opened UI: {ui_path}")
+        sys.exit(0)
+
+    if args.mode == "api-test":
         from pettingzoo.test import parallel_api_test
         print(json.dumps({"type": "info", "msg": "Running PettingZoo API test..."}), flush=True)
         try:
