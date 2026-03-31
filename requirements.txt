@@ -1,0 +1,11 @@
+# Mathematics & Environment
+numpy>=1.24.0
+gymnasium>=0.29.0
+pettingzoo>=1.24.3
+
+# Deep Learning Backbone (GAT, PPO)
+torch>=2.0.0
+torch-geometric>=2.4.0
+
+# Multi-Agent RL Frameworks
+ray[rllib]>=2.9.0
